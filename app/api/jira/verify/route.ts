@@ -1,3 +1,15 @@
+// Vercel에 올리는 동안 JIRA 연동을 잠시 막아둔다. 서버가 사내망 밖에 있어
+// jira.lge.com(공인 DNS에 없는 사내 전용 주소)에 애초에 닿지 않기 때문이다.
+// 사내망 안에서 로컬로 띄울 때 아래 실제 구현으로 되돌린다.
+
+export async function POST() {
+  return Response.json(
+    { ok: false, reason: "unreachable" },
+    { status: 200 }
+  );
+}
+
+/*
 const VERIFY_TIMEOUT_MS = 8000;
 
 type VerifyRequestBody = {
@@ -58,3 +70,4 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 }
+*/
