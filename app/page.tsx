@@ -1,9 +1,28 @@
 import Image from "next/image";
+import { Button } from "@/components/ui/button";
+import { BarChart } from "@/components/ui/bar-chart";
+
+const monthlySignups = [
+  { label: "1월", value: 320 },
+  { label: "2월", value: 480 },
+  { label: "3월", value: 410 },
+  { label: "4월", value: 560 },
+  { label: "5월", value: 690 },
+  { label: "6월", value: 610 },
+];
 
 export default function Home() {
   return (
     <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
+        <div className="flex flex-wrap gap-3">
+          <Button variant="default">Default</Button>
+          <Button variant="secondary">Secondary</Button>
+          <Button variant="outline">Outline</Button>
+          <Button variant="ghost">Ghost</Button>
+          <Button variant="destructive">Destructive</Button>
+        </div>
+        <BarChart title="월별 신규 가입자" data={monthlySignups} className="max-w-md" />
         <Image
           className="dark:invert h-5 w-[100px]"
           src="/next.svg"
