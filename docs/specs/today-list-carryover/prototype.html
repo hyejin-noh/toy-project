@@ -1,0 +1,722 @@
+<!--
+  prototype shell: the review chrome every prototype starts from.
+
+  Keep this comment in the prototype you grow from here: it is the contract,
+  and later turns work from that file rather than from this one.
+
+  Contract (extend product screens; keep the review shell):
+  - Product:  .sh-stage contains only end-user product UI. Keep review notes,
+               rationale, instructions, and approval controls in conversation.
+  - Screens:  <section data-screen="slug" data-title="Label"> inside .sh-stage.
+               The selector, arrow keys, and #hash routing build themselves.
+               Use one option per product destination or distinct surface,
+               named by its product role. Keep baselines, variants, comparison
+               labels, steps, indexes, and progress out of names and states.
+               Links may use href="#slug".
+  - States:   "Default" is automatic. A screen declares only representative
+               presets in data-states="Empty,Error". Use natural, screen-specific
+               names. Reserve presets for important multi-step results, forced
+               data or errors, or materially different structure; keep one-click
+               and transient states as interactions. Use data-when="Empty" on
+               preset-only elements. Call prototypeShell.setState("Name") on
+               entry and setState("Default") on exit, including when repeated
+               actions cross a preset condition.
+  - Viewport: "vp (m)" cycles full / 390 / 768. The 390 preset is a
+               fixed-height, internally scrolling phone frame. Start a
+               mobile-first prototype by adding class="sh-vp-390" to <body>
+               (or a bootstrap classList.add before the chrome script runs).
+  - Pinning:  keep in-frame bars (tab bars, CTAs) inside the phone with
+               position: sticky; position: fixed pins to the browser window.
+  - Tokens:   replace the project-tokens block with project tokens copied
+               verbatim. Map differing names to --background, --foreground, and
+               --font afterwards; replace network fonts with a system stack and
+               note that substitution. Without a design system, keep this
+               palette as the finished style. When the project ships dark
+               tokens, copy them under .sh-theme-dark, which the shell sets
+               on both the root element and body, so :root.sh-theme-dark and
+               body.sh-theme-dark work too. A .dark class or a
+               prefers-color-scheme media query copied verbatim would follow
+               the reviewer's system instead of the toggle.
+  - Theme:    the light / dark switch (t) changes the product surface only.
+               It appears only when a .sh-theme-dark rule declares dark tokens,
+               so a prototype without them carries no theme control. Prototypes
+               always load light; the review bar keeps its own dark styling in
+               both themes so it still reads as chrome.
+  - Placeholders: .wf-pic stands in for pictures the prototype has no real
+               files for. Use real text everywhere text belongs.
+
+  - Chrome:   Keep exactly the screen selector, selected-screen state selector,
+               viewport cycle, and theme toggle.
+
+  Self-contained by design: no build, no framework, no network.
+
+  Font substitution note: the project uses Inter + Geist via next/font/google
+  (network fonts). Substituted with a system UI stack here.
+-->
+<meta charset="utf-8">
+<title>오늘 목록 — Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* ── project tokens: copied verbatim from app/globals.css (oklch) ── */
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.505 0.213 27.518);
+    --primary-foreground: oklch(0.971 0.013 17.38);
+    --secondary: oklch(0.967 0.001 286.375);
+    --secondary-foreground: oklch(0.21 0.006 285.885);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --radius: 0.875rem;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  .sh-theme-dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.444 0.177 26.899);
+    --primary-foreground: oklch(0.971 0.013 17.38);
+    --secondary: oklch(0.274 0.006 286.033);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+  }
+
+  /* ── review chrome (sh-*): keep; extend product styles elsewhere ── */
+  * { box-sizing: border-box }
+  body {
+    margin: 0; padding: 0 0 40px;
+    background: var(--background, #f6f6f6); color: var(--foreground, #3a3a3a);
+    font-family: var(--font, system-ui, sans-serif);
+  }
+  .sh-bar {
+    position: sticky; top: 0; z-index: 999;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    padding: 8px 12px; background: #191a1c; color: #d7d7d7;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .sh-bar b, .sh-control-label { color: #8a8f98; font-weight: 500 }
+  .sh-control { display: inline-flex; gap: 5px; align-items: center }
+  .sh-bar button {
+    border: 1px solid #3a3d42; background: none; color: inherit;
+    font: inherit; padding: 2px 9px; border-radius: 99px; cursor: pointer;
+  }
+  .sh-bar select {
+    width: 170px; border: 1px solid #3a3d42; background: #232428; color: inherit;
+    font: inherit; padding: 3px 28px 3px 9px; border-radius: 7px; cursor: pointer;
+    color-scheme: dark;
+  }
+  #sh-screen { width: 190px }
+  .sh-bar button.on { background: #d7d7d7; color: #191a1c; border-color: #d7d7d7 }
+  .sh-theme { display: inline-flex; border: 1px solid #3a3d42; border-radius: 99px; overflow: hidden }
+  .sh-theme button { border: 0; border-radius: 0; padding: 2px 10px }
+  .sh-spacer { flex: 1 }
+  .sh-stage { max-width: 960px; margin: 0 auto; padding: 12px 16px 0 }
+  [hidden] { display: none !important }
+
+  /* viewport presets */
+  .sh-vp-390 .sh-stage {
+    max-width: 390px; background: var(--background, #f6f6f6);
+    border: 10px solid #191a1c; border-radius: 28px;
+    padding: 16px 12px; height: min(844px, calc(100dvh - 52px));
+    overflow-y: auto; margin-top: 12px;
+  }
+  .sh-vp-768 .sh-stage {
+    max-width: 768px; border: 1px solid #c4c4c4; border-radius: 12px;
+    padding: 16px; margin-top: 12px;
+  }
+
+  /* placeholders */
+  .wf-pic  { border-radius: 4px; background:
+             repeating-linear-gradient(45deg, #e9e9e9, #e9e9e9 6px, #f2f2f2 6px, #f2f2f2 12px) }
+  .sh-theme-dark .wf-pic { background: repeating-linear-gradient(45deg,
+             color-mix(in srgb, var(--foreground) 16%, transparent) 0 6px,
+             color-mix(in srgb, var(--foreground) 8%, transparent) 6px 12px) }
+
+  /* ══════════════════════════ product styles ══════════════════════════ */
+  /* Sharp corners everywhere: this project's shadcn preset (base-lyra) uses
+     rounded-none on every primitive regardless of the --radius token. */
+  .pg { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;
+        font-size: 13px; line-height: 1.6; }
+  .pg h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em }
+  .pg .lede { color: var(--muted-foreground); font-size: 13px; margin: 0 }
+  .pg-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+
+  [data-component="Card"] {
+    background: var(--card); color: var(--card-foreground);
+    border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+    padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  [data-component="CardTitle"] { font-weight: 600; font-size: 13px; margin: 0 }
+  [data-component="CardDescription"] { color: var(--muted-foreground); font-size: 12px; margin: 0 }
+
+  [data-component="Button"] {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 32px; padding: 0 10px; border: 1px solid transparent;
+    font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer;
+    background: var(--primary); color: var(--primary-foreground);
+  }
+  [data-component="Button"]:disabled { opacity: .5; cursor: not-allowed }
+  [data-component="Button"][data-variant="outline"] {
+    background: transparent; color: var(--foreground); border-color: var(--border);
+  }
+  [data-component="Button"][data-variant="ghost"] {
+    background: transparent; color: var(--foreground); border-color: transparent; padding: 0 6px;
+  }
+  [data-component="Button"][data-variant="ghost"]:hover,
+  [data-component="Button"][data-variant="outline"]:hover { background: var(--muted) }
+  [data-component="Button"] svg { width: 14px; height: 14px }
+
+  [data-component="Field"] { display: flex; flex-direction: column; gap: 6px; width: 100% }
+  [data-component="FieldLabel"] { font-size: 12px; }
+  [data-component="Input"] {
+    height: 32px; width: 100%; border: 1px solid var(--input); background: transparent;
+    color: var(--foreground); padding: 0 10px; font-size: 12px; font-family: inherit;
+  }
+  [data-component="Input"]::placeholder { color: var(--muted-foreground) }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+  [data-component="ToggleGroup"] { display: inline-flex; gap: 2px }
+  [data-component="ToggleGroupItem"] {
+    height: 28px; padding: 0 10px; font-size: 12px; border: 1px solid var(--input);
+    background: transparent; color: var(--foreground); cursor: pointer;
+  }
+  [data-component="ToggleGroupItem"][aria-pressed="true"] { background: var(--muted); font-weight: 600 }
+
+  [data-component="Badge"] {
+    display: inline-flex; align-items: center; height: 20px; padding: 0 8px;
+    font-size: 11px; font-weight: 500; background: var(--secondary); color: var(--secondary-foreground);
+  }
+  a[data-component="Badge"] { text-decoration: none; cursor: pointer }
+  a[data-component="Badge"]:hover { background: color-mix(in oklch, var(--secondary), var(--foreground) 8%) }
+  [data-component="Badge"][data-variant="outline"] { background: transparent; border: 1px solid var(--border); color: var(--foreground) }
+
+  [data-component="Checkbox"] {
+    width: 16px; height: 16px; border: 1px solid var(--input); background: transparent;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer;
+    color: var(--primary-foreground);
+  }
+  [data-component="Checkbox"][aria-checked="true"] { background: var(--primary); border-color: var(--primary) }
+  [data-component="Checkbox"] svg { width: 12px; height: 12px; visibility: hidden }
+  [data-component="Checkbox"][aria-checked="true"] svg { visibility: visible }
+
+  [data-component="Alert"] { border: 1px solid var(--border); background: var(--card); padding: 8px 10px; font-size: 12px; display: flex; flex-direction: column; gap: 2px }
+  [data-component="Alert"][data-variant="destructive"] { color: var(--destructive) }
+  [data-component="AlertTitle"] { font-weight: 500 }
+  [data-component="AlertDescription"] { color: var(--muted-foreground) }
+  [data-component="Alert"][data-variant="destructive"] [data-component="AlertDescription"] { color: color-mix(in oklch, var(--destructive), transparent 10%) }
+
+  [data-component="Empty"] {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    text-align: center; border: 1px dashed var(--border); padding: 40px 20px;
+  }
+  [data-component="EmptyTitle"] { font-weight: 500; font-size: 13px }
+  [data-component="EmptyDescription"] { color: var(--muted-foreground); font-size: 12px; max-width: 320px }
+
+  .item-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px }
+  .item-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    border: 1px solid var(--border); padding: 12px;
+  }
+  .item-row .item-main { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 160px }
+  .item-row .item-title { font-size: 13px }
+  .item-row.is-done .item-title { color: var(--muted-foreground); text-decoration: line-through }
+  .item-row.is-done [data-component="ToggleGroup"] { display: none }
+  .item-row .item-badges { display: flex; flex-wrap: wrap; gap: 4px }
+  .item-row .item-actions { display: flex; gap: 2px }
+  .section-title { font-size: 12px; font-weight: 500; color: var(--muted-foreground); margin: 0 0 8px }
+  .icon-btn svg { width: 14px; height: 14px }
+
+  [data-component="Card"].settings-card { gap: 16px }
+  .form-actions { display: flex; flex-wrap: wrap; gap: 8px }
+</style>
+
+<header class="sh-bar">
+  <b>proto</b>
+  <label class="sh-control"><span class="sh-control-label">screen</span><select id="sh-screen"></select></label>
+  <span class="sh-spacer"></span>
+  <label class="sh-control"><span class="sh-control-label">state</span><select id="sh-state"></select></label>
+  <button id="sh-vp">vp: full (m)</button>
+  <div class="sh-theme" id="sh-theme" role="group" aria-label="theme (t)">
+    <button data-theme="light">light</button><button data-theme="dark">dark</button>
+  </div>
+</header>
+
+<main class="sh-stage">
+
+  <!-- ═══════════════════════ 오늘 목록 ═══════════════════════ -->
+  <section data-screen="today-list" data-title="오늘 목록" data-states="비어있음">
+    <div class="pg">
+      <div class="pg-header">
+        <div>
+          <h1>오늘 목록</h1>
+          <p class="lede">급한 순서대로 오늘 챙길 일을 봅니다.</p>
+        </div>
+        <a href="#settings" data-component="Button" data-variant="outline">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
+          설정
+        </a>
+      </div>
+
+      <div data-component="Card">
+        <div data-component="CardTitle">새 항목 추가</div>
+        <form class="add-form" onsubmit="return addItem(event)">
+          <div data-component="Field">
+            <label data-component="FieldLabel" class="sr-only" for="new-item">할 일</label>
+            <input data-component="Input" id="new-item" placeholder="무슨 일인지 적어주세요. 이슈 키나 URL을 함께 붙여넣을 수 있습니다.">
+          </div>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap">
+            <div data-component="ToggleGroup" role="group" aria-label="priority" id="new-item-priority">
+              <button type="button" data-component="ToggleGroupItem" data-value="high" aria-pressed="false" onclick="selectNewPriority(this)">높음</button>
+              <button type="button" data-component="ToggleGroupItem" data-value="medium" aria-pressed="true" onclick="selectNewPriority(this)">보통</button>
+              <button type="button" data-component="ToggleGroupItem" data-value="low" aria-pressed="false" onclick="selectNewPriority(this)">낮음</button>
+            </div>
+            <button type="submit" data-component="Button">추가</button>
+          </div>
+        </form>
+      </div>
+
+      <div data-when="Default">
+        <div style="display:flex; flex-direction:column; gap:20px">
+          <section>
+            <p class="section-title">열린 항목</p>
+            <ul class="item-list" id="open-list">
+              <li class="item-row" data-priority="high" data-created-days-ago="2">
+                <button data-component="Checkbox" aria-label="완료 표시" aria-checked="false" onclick="toggleDone(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <div class="item-main">
+                  <span class="item-title">로그인 화면에서 세션 만료 처리가 안 됨</span>
+                  <div class="item-badges">
+                    <a href="#" data-component="Badge" onclick="return false">GENSIX-142</a>
+                    <span data-component="Badge" data-variant="outline">2일째</span>
+                  </div>
+                </div>
+                <div data-component="ToggleGroup" role="group" aria-label="priority">
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="true" onclick="setRowPriority(this,'high')">높음</button>
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="false" onclick="setRowPriority(this,'medium')">보통</button>
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="false" onclick="setRowPriority(this,'low')">낮음</button>
+                </div>
+                <div class="item-actions">
+                  <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="수정" onclick="toggleEdit(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  </button>
+                  <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="삭제" onclick="removeRow(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  </button>
+                </div>
+              </li>
+
+              <li class="item-row" data-priority="high" data-created-days-ago="0">
+                <button data-component="Checkbox" aria-label="완료 표시" aria-checked="false" onclick="toggleDone(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <div class="item-main">
+                  <span class="item-title">VOC: 고객사 A 요청 — 엑셀 다운로드 컬럼 순서 변경</span>
+                  <div class="item-badges"></div>
+                </div>
+                <div data-component="ToggleGroup" role="group" aria-label="priority">
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="true" onclick="setRowPriority(this,'high')">높음</button>
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="false" onclick="setRowPriority(this,'medium')">보통</button>
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="false" onclick="setRowPriority(this,'low')">낮음</button>
+                </div>
+                <div class="item-actions">
+                  <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="수정" onclick="toggleEdit(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  </button>
+                  <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="삭제" onclick="removeRow(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  </button>
+                </div>
+              </li>
+
+              <li class="item-row" data-priority="medium" data-created-days-ago="1">
+                <button data-component="Checkbox" aria-label="완료 표시" aria-checked="false" onclick="toggleDone(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <div class="item-main">
+                  <span class="item-title">ccIC27 배포 스크립트 리뷰</span>
+                  <div class="item-badges">
+                    <a href="#" data-component="Badge" onclick="return false">CCIC27-88</a>
+                    <span data-component="Badge" data-variant="outline">1일째</span>
+                  </div>
+                </div>
+                <div data-component="ToggleGroup" role="group" aria-label="priority">
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="false" onclick="setRowPriority(this,'high')">높음</button>
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="true" onclick="setRowPriority(this,'medium')">보통</button>
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="false" onclick="setRowPriority(this,'low')">낮음</button>
+                </div>
+                <div class="item-actions">
+                  <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="수정" onclick="toggleEdit(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  </button>
+                  <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="삭제" onclick="removeRow(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  </button>
+                </div>
+              </li>
+
+              <li class="item-row" data-priority="low" data-created-days-ago="4">
+                <button data-component="Checkbox" aria-label="완료 표시" aria-checked="false" onclick="toggleDone(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <div class="item-main">
+                  <span class="item-title">주간보고 자료 정리</span>
+                  <div class="item-badges">
+                    <span data-component="Badge" data-variant="outline">4일째</span>
+                  </div>
+                </div>
+                <div data-component="ToggleGroup" role="group" aria-label="priority">
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="false" onclick="setRowPriority(this,'high')">높음</button>
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="false" onclick="setRowPriority(this,'medium')">보통</button>
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="true" onclick="setRowPriority(this,'low')">낮음</button>
+                </div>
+                <div class="item-actions">
+                  <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="수정" onclick="toggleEdit(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  </button>
+                  <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="삭제" onclick="removeRow(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </section>
+
+          <section id="done-section">
+            <p class="section-title">오늘 완료</p>
+            <ul class="item-list" id="done-list">
+              <li class="item-row is-done" data-priority="medium" data-created-days-ago="0">
+                <button data-component="Checkbox" aria-label="완료 되돌리기" aria-checked="true" onclick="toggleDone(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <div class="item-main">
+                  <span class="item-title">Gen6 대시보드 API 응답 지연 확인</span>
+                  <div class="item-badges">
+                    <a href="#" data-component="Badge" onclick="return false">GEN6-51</a>
+                  </div>
+                </div>
+                <div data-component="ToggleGroup" role="group" aria-label="priority">
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="false" onclick="setRowPriority(this,'high')">높음</button>
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="true" onclick="setRowPriority(this,'medium')">보통</button>
+                  <button type="button" data-component="ToggleGroupItem" aria-pressed="false" onclick="setRowPriority(this,'low')">낮음</button>
+                </div>
+                <div class="item-actions">
+                  <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="수정" onclick="toggleEdit(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  </button>
+                  <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="삭제" onclick="removeRow(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </section>
+        </div>
+      </div>
+
+      <div data-when="비어있음" data-component="Empty">
+        <div data-component="EmptyTitle">아직 할 일이 없습니다</div>
+        <div data-component="EmptyDescription">위 입력창에 무슨 일인지 한 줄로 적고 추가를 눌러 시작하세요.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ 설정 (JIRA 연결) ═══════════════════════ -->
+  <section data-screen="settings" data-title="설정"
+            data-states="확인 중,연결됨,실패 (주소),실패 (토큰)">
+    <div class="pg">
+      <div>
+        <a href="#today-list" data-component="Button" data-variant="ghost">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          오늘 목록
+        </a>
+      </div>
+      <div>
+        <h1>설정</h1>
+        <p class="lede">상단에서 들어온 설정 화면입니다. 지금은 JIRA 연결 하나뿐입니다.</p>
+      </div>
+
+      <div data-component="Card" class="settings-card">
+        <div>
+          <div data-component="CardTitle">JIRA 연결</div>
+          <div data-component="CardDescription">사내에 설치된 Jira의 개인 액세스 토큰으로 연결합니다. JIRA에는 아무것도 쓰지 않습니다.</div>
+        </div>
+        <form onsubmit="return checkConnection(event)" style="display:flex; flex-direction:column; gap:14px">
+          <div data-component="Field">
+            <label data-component="FieldLabel" for="jira-url">JIRA 주소</label>
+            <input data-component="Input" id="jira-url" placeholder="https://jira.example.com" value="https://jira.example.com">
+          </div>
+          <div data-component="Field">
+            <label data-component="FieldLabel" for="jira-token">개인 액세스 토큰</label>
+            <input data-component="Input" id="jira-token" type="password" value="••••••••••••">
+          </div>
+
+          <div data-when="확인 중" data-component="Alert">
+            <div data-component="AlertTitle">연결을 확인하는 중입니다...</div>
+          </div>
+          <div data-when="연결됨" data-component="Alert">
+            <div data-component="AlertTitle">연결됨</div>
+            <div data-component="AlertDescription">홍길동 계정으로 연결되었습니다.</div>
+          </div>
+          <div data-when="실패 (주소)" data-component="Alert" data-variant="destructive">
+            <div data-component="AlertTitle">연결 실패</div>
+            <div data-component="AlertDescription">주소를 찾을 수 없습니다. JIRA 주소를 확인해 주세요.</div>
+          </div>
+          <div data-when="실패 (토큰)" data-component="Alert" data-variant="destructive">
+            <div data-component="AlertTitle">연결 실패</div>
+            <div data-component="AlertDescription">토큰이 거부되었습니다. 개인 액세스 토큰을 확인해 주세요.</div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" data-component="Button">저장하고 연결 확인</button>
+            <button type="button" data-component="Button" data-variant="outline" onclick="clearConnection()">연결 끊기</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // ── product interactions (dummy, no persistence, no network) ──
+  let newPriority = 'medium';
+  function selectNewPriority(btn) {
+    btn.parentElement.querySelectorAll('[data-component="ToggleGroupItem"]').forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+    newPriority = btn.dataset.value;
+  }
+
+  function priorityRank(p) { return { high: 0, medium: 1, low: 2 }[p]; }
+
+  function resortOpenList() {
+    const list = document.getElementById('open-list');
+    const rows = [...list.children];
+    rows.sort((a, b) => {
+      const byPriority = priorityRank(a.dataset.priority) - priorityRank(b.dataset.priority);
+      if (byPriority !== 0) return byPriority;
+      return Number(b.dataset.createdDaysAgo) - Number(a.dataset.createdDaysAgo);
+    });
+    rows.forEach(r => list.appendChild(r));
+  }
+
+  function addItem(event) {
+    event.preventDefault();
+    const input = document.getElementById('new-item');
+    const text = input.value.trim();
+    if (!text) return false;
+
+    const li = document.createElement('li');
+    li.className = 'item-row';
+    li.dataset.priority = newPriority;
+    li.dataset.createdDaysAgo = '0';
+
+    const keyMatch = text.match(/\b[A-Z][A-Z0-9]{1,9}-\d+\b/);
+    const badgeHtml = keyMatch
+      ? `<a href="#" data-component="Badge" onclick="return false">${keyMatch[0]}</a>`
+      : '';
+
+    li.innerHTML = `
+      <button data-component="Checkbox" aria-label="완료 표시" aria-checked="false" onclick="toggleDone(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <div class="item-main">
+        <span class="item-title"></span>
+        <div class="item-badges">${badgeHtml}</div>
+      </div>
+      <div data-component="ToggleGroup" role="group" aria-label="priority">
+        <button type="button" data-component="ToggleGroupItem" aria-pressed="${newPriority === 'high'}" onclick="setRowPriority(this,'high')">높음</button>
+        <button type="button" data-component="ToggleGroupItem" aria-pressed="${newPriority === 'medium'}" onclick="setRowPriority(this,'medium')">보통</button>
+        <button type="button" data-component="ToggleGroupItem" aria-pressed="${newPriority === 'low'}" onclick="setRowPriority(this,'low')">낮음</button>
+      </div>
+      <div class="item-actions">
+        <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="수정" onclick="toggleEdit(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+        </button>
+        <button data-component="Button" data-variant="ghost" class="icon-btn" aria-label="삭제" onclick="removeRow(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </button>
+      </div>`;
+    li.querySelector('.item-title').textContent = text;
+
+    document.getElementById('open-list').appendChild(li);
+    resortOpenList();
+    input.value = '';
+    return false;
+  }
+
+  function setRowPriority(btn, value) {
+    const row = btn.closest('.item-row');
+    row.dataset.priority = value;
+    btn.closest('[data-component="ToggleGroup"]').querySelectorAll('[data-component="ToggleGroupItem"]')
+      .forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+    resortOpenList();
+  }
+
+  function toggleDone(checkbox) {
+    const row = checkbox.closest('.item-row');
+    const nowDone = checkbox.getAttribute('aria-checked') !== 'true';
+    checkbox.setAttribute('aria-checked', String(nowDone));
+    checkbox.setAttribute('aria-label', nowDone ? '완료 되돌리기' : '완료 표시');
+    row.classList.toggle('is-done', nowDone);
+    if (nowDone) {
+      document.getElementById('done-list').prepend(row);
+    } else {
+      document.getElementById('open-list').appendChild(row);
+      resortOpenList();
+    }
+  }
+
+  function toggleEdit(btn) {
+    const row = btn.closest('.item-row');
+    const titleEl = row.querySelector('.item-title');
+    if (row.querySelector('.edit-input')) return;
+    const current = titleEl.textContent;
+    const input = document.createElement('input');
+    input.className = 'edit-input';
+    input.setAttribute('data-component', 'Input');
+    input.value = current;
+    input.style.width = '100%';
+    titleEl.replaceWith(input);
+    input.focus();
+    input.select();
+    const commit = () => {
+      const span = document.createElement('span');
+      span.className = 'item-title';
+      span.textContent = input.value.trim() || current;
+      input.replaceWith(span);
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
+    input.addEventListener('blur', commit);
+  }
+
+  function removeRow(btn) {
+    btn.closest('.item-row').remove();
+  }
+
+  function checkConnection(event) {
+    event.preventDefault();
+    prototypeShell.setState('확인 중');
+    setTimeout(() => prototypeShell.setState('연결됨'), 900);
+    return false;
+  }
+  function clearConnection() {
+    document.getElementById('jira-url').value = '';
+    document.getElementById('jira-token').value = '';
+    prototypeShell.setState('Default');
+  }
+</script>
+
+<script>
+  const stage = document.querySelector('.sh-stage');
+  const screens = [...stage.querySelectorAll('[data-screen]')];
+  const screenSelect = document.getElementById('sh-screen');
+  const stateSelect = document.getElementById('sh-state');
+  const vpBtn = document.getElementById('sh-vp');
+  const themeCtl = document.getElementById('sh-theme');
+  const themeBtns = [...themeCtl.querySelectorAll('button')];
+  let current = null;
+  let currentStates = [];
+
+  screens.forEach(s => {
+    const option = document.createElement('option');
+    option.textContent = s.dataset.title || s.dataset.screen;
+    option.value = s.dataset.screen;
+    screenSelect.append(option);
+  });
+  screenSelect.onchange = () => show(screenSelect.value);
+
+  function show(slug) {
+    current = screens.find(s => s.dataset.screen === slug) || screens[0];
+    screens.forEach(s => s.hidden = s !== current);
+    screenSelect.value = current.dataset.screen;
+    history.replaceState(null, '', '#' + current.dataset.screen);
+    buildStates();
+  }
+
+  function buildStates() {
+    const declared = (current.dataset.states || '').split(',').map(x => x.trim()).filter(Boolean);
+    currentStates = ['Default', ...declared.filter(name => name !== 'Default')];
+    stateSelect.innerHTML = '';
+    currentStates.forEach(name => {
+      const option = document.createElement('option');
+      option.textContent = name;
+      option.value = name;
+      stateSelect.append(option);
+    });
+    applyState('Default');
+  }
+
+  function applyState(name) {
+    const active = currentStates.includes(name) ? name : 'Default';
+    current.querySelectorAll('[data-when]').forEach(el => {
+      el.hidden = !el.dataset.when.split(',').map(x => x.trim()).includes(active);
+    });
+    stateSelect.value = active;
+  }
+  stateSelect.onchange = () => applyState(stateSelect.value);
+
+  window.prototypeShell = {
+    showScreen: show,
+    setState: applyState,
+    getScreen: () => current?.dataset.screen,
+    getState: () => stateSelect.value
+  };
+
+  const VPS = ['full', '390', '768'];
+  let vp = VPS.find(v => document.body.classList.contains('sh-vp-' + v)) || 'full';
+  function applyVp() {
+    VPS.forEach(v => document.body.classList.toggle('sh-vp-' + v, v === vp && v !== 'full'));
+    vpBtn.textContent = 'vp: ' + vp + ' (m)';
+    vpBtn.classList.toggle('on', vp !== 'full');
+  }
+  vpBtn.onclick = () => { vp = VPS[(VPS.indexOf(vp) + 1) % VPS.length]; applyVp(); };
+  applyVp();
+
+  const hasDark = [...document.styleSheets].some(sheet => {
+    try {
+      return [...sheet.cssRules].some(rule => (rule.selectorText || '')
+        .split(',').some(part => /\.sh-theme-dark$/.test(part.trim())));
+    } catch { return false }
+  });
+  let dark = false;
+  function applyTheme() {
+    document.documentElement.classList.toggle('sh-theme-dark', dark);
+    document.body.classList.toggle('sh-theme-dark', dark);
+    themeBtns.forEach(b => b.classList.toggle('on', (b.dataset.theme === 'dark') === dark));
+  }
+  themeCtl.hidden = !hasDark;
+  themeBtns.forEach(b => b.onclick = () => { dark = b.dataset.theme === 'dark'; applyTheme(); });
+  applyTheme();
+
+  addEventListener('keydown', e => {
+    if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    const i = screens.indexOf(current);
+    if (e.key === 'ArrowRight') show(screens[(i + 1) % screens.length].dataset.screen);
+    if (e.key === 'ArrowLeft') show(screens[(i - 1 + screens.length) % screens.length].dataset.screen);
+    if (e.key === 'm') vpBtn.click();
+    if (e.key === 't' && !themeCtl.hidden) { dark = !dark; applyTheme(); }
+  });
+
+  addEventListener('hashchange', () => show(location.hash.slice(1)));
+  show(location.hash.slice(1));
+</script>
